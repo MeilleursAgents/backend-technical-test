@@ -50,7 +50,7 @@ def get_price(cog):
     Return the volumes distribution for the given cog in storage format
     """
     # TODO : maybe we can do a better histogram (better computation, better volume and labels, etc.)
-    serie_name = 'Prix ' + cog
+    serie_name = f'Prix {cog}'
     labels = {'0-6000': 0, '6000-8000': 0, '8000-10000': 0,  '10000-14000': 0, '14000-100000': 0}
 
     for label in labels:
