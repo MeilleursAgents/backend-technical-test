@@ -52,7 +52,7 @@ def page_fetcher() -> ListingPageGenerator:
     while True:
         logger.info("Fetching page %d", page_number)
 
-        response = requests.get(base_url + f"?page={page_number}")
+        response = requests.get(f"{base_url}?page={page_number}")
         if response.status_code == 416:
             return
         if response.status_code != 200:

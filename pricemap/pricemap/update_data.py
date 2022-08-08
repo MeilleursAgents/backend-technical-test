@@ -56,7 +56,7 @@ def update():
         p = 0
         while True:
             p += 1
-            url = "http://listingapi:5000/listings/" + str(geom) + "?page=" + str(p)
+            url = f"http://listingapi:5000/listings/{str(geom)}?page={p}"
             d = requests.get(url)
 
             # Break when finished
