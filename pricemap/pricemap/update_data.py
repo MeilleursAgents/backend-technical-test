@@ -66,6 +66,8 @@ def update():
             for item in d.json():
                 listing_id = item["listing_id"]
                 try:
+                  # TODO: There is a field named pièces in the JSON.
+                  # It's not UTF-8 encoded, so it should be fixed
                     room_count = 1 if "Studio" in item["title"] else int("".join([s for s in item["title"].split("pièces")[0] if s.isdigit()]))
                 except:
                     room_count = 0
