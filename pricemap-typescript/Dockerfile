@@ -14,9 +14,9 @@ RUN if ! $(awk -F':' '{print $3}' /etc/group |grep -q ${GROUP_ID}) ; then groupa
 RUN usermod -a -G ${GROUP_ID} pricemap
 
 USER pricemap
+
+COPY --chown=pricemap:${GROUP_ID} package*.json /home/pricemap/app/
+COPY --chown=pricemap:${GROUP_ID} . /home/pricemap/app
+
 WORKDIR /home/pricemap/app
-
-COPY package*.json ./
 RUN npm ci
-
-COPY . .

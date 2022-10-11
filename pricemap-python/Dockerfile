@@ -14,10 +14,10 @@ RUN if ! $(awk -F':' '{print $3}' /etc/group |grep -q ${GROUP_ID}) ; then groupa
 RUN usermod -a -G ${GROUP_ID} pricemap
 
 # add script to wait for db container to be ready
-COPY docker/wait-for-postgres.sh /home/pricemap/wait-for-postgres.sh
+COPY --chown=pricemap:${GROUP_ID} docker/wait-for-postgres.sh /home/pricemap/wait-for-postgres.sh
 
 USER pricemap
-COPY . /home/pricemap/app
+COPY --chown=pricemap:${GROUP_ID} . /home/pricemap/app
 
 RUN pip3 install pipenv
 
