@@ -1,0 +1,125 @@
+name: Test Image execution on OS
+
+on:
+  # run it on push to the default repository branch
+  push:
+    branches: [master]
+  pull_request:
+  # Only trigger, when the build workflow succeeded
+  # workflow_run:
+  #   workflows: [ "Deploy Application images when Merging on Master" ]
+  #   types: [completed]
+
+env:
+  LISTINGAPI_ENDPOINT: "http://localhost:8181/listings/32682"
+  PRICEMAP_PYTHON_ENDPOINT: "http://localhost:8080"
+  PRICEMAP_TYPESCRIPT_ENDPOINT: "http://localhost:8080"
+
+jobs:
+  build:
+    name: Test containers execution
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    services:
+      db:
+        image: "mdillon/postgis:11-alpine"
+        env:
+          POSTGRES_DB: pricemap
+          POSTGRES_USER: pricemap
+          POSTGRES_PASSWORD: pricemap
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 20s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 15s
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
+
+    # steps to perform in job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Initialize Database
+        run: "psql -f pricemap-python/docker/db/init.sql postgresql://pricemap:pricemap@localhost:5432/pricemap"
+
+      - name: Create Network
+        run: |
+          docker network create github_network
+
+      - name: Create listingAPI container
+        id: create_listingapi_container
+        run: |
+          docker run --name listingapi --network github_network --network-alias listingapi -p 8181:5000 --detach \
+          -e "FLASK_APP=app" -e GITHUB_ACTIONS=true -e \
+          CI=true ghcr.io/meilleursagents/backend-technical-test/listingapi:latest flask run -h 0.0.0.0
+
+      - name: Create pricemap Python container
+        id: create_pricemap_python_container
+        run: |
+          docker run --name pricemap-python --network github_network --network-alias pricemap-python -p 8080:5000 \
+          --detach -e "PGHOST=host.docker.internal" -e "PGDATABASE=pricemap" -e "PGUSER=pricemap" \
+          -e "PGPASSWORD=pricemap" -e "FLASK_APP=app" -e "FLASK_DEBUG=1"	-e GITHUB_ACTIONS=true -e CI=true \
+          ghcr.io/meilleursagents/backend-technical-test/pricemap-python:latest \
+          /home/pricemap/wait-for-postgres.sh db:5432 -- flask run -h 0.0.0.0
+
+      - name: Create pricemap Typescript container
+        id: create_pricemap_typescript_container
+        run: |
+          docker run --name pricemap-typescript --network github_network --network-alias pricemap-typescript \
+          -p 8282:5000 -p 9222:9222 --detach -e "PGHOST=host.docker.internal" -e "PGDATABASE=pricemap" \
+          -e "PGUSER=pricemap" -e "PGPASSWORD=pricemap" -e GITHUB_ACTIONS=true -e CI=true \
+          ghcr.io/meilleursagents/backend-technical-test/pricemap-typescript:latest npm run watch
+
+      - name: Display running containers
+        run: |
+          docker ps -a
+          docker network ls
+
+      - name: Check listingAPI availability
+        run: |
+          response=$(mktemp /tmp/listingAPI_response.XXXX)
+          code=$(curl --silent -o $response -w "%{http_code}" "${{ env.LISTINGAPI_ENDPOINT }}")
+          apiResponseCount=$(cat $response | jq length)
+          # see https://github.com/stedolan/jq
+          if [ $code -eq 200 ] && [ $apiResponseCount -eq 20 ]; then
+              echo "listingAPI Call on ${{ env.LISTINGAPI_ENDPOINT }} is OK! 🎉";
+          else
+              echo "listingAPI returns a wrong status code ($code) or a wrong listings count ($apiResponseCount)";
+          fi
+          rm $response
+
+      - name: Check pricemap Python availability
+        run: |
+          sleep 20
+          curl "http://localhost:8080/" -vvv
+
+      #- name: Check pricemap Python availability
+      #  run: |
+      #    response=$(mktemp /tmp/pricemap_python_response.XXXX)
+      #    code=$(curl -o $response -w "%{http_code}"  ${{ env.PRICEMAP_PYTHON_ENDPOINT }})
+      #    cat $response
+      #    if [ $code -eq 200 ]; then
+      #        echo "pricemap python Call on ${{ env.PRICEMAP_PYTHON_ENDPOINT }} is OK! 🎉";
+      #    else
+      #        echo "pricemap python returns a wrong status code ($code)";
+      #    fi
+      #    rm $response
+#
+      #- name: Check pricemap typescript availability
+      #  run: |
+      #    response=$(mktemp /tmp/pricemap_typescript_response.XXXX)
+      #    code=$(curl --silent -o $response -w "%{http_code}" "${{ env.PRICEMAP_TYPESCRIPT_ENDPOINT }}")
+      #    cat $response
+      #    if [ $code -eq 200 ]; then
+      #        echo "pricemap python Call on ${{ env.PRICEMAP_TYPESCRIPT_ENDPOINTg }} is OK! 🎉";
+      #    else
+      #        echo "pricemap python returns a wrong status code ($code)";
+      #    fi
+      #    rm $response
+#
