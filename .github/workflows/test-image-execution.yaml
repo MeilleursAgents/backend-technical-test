@@ -1,0 +1,77 @@
+name: Test Image execution on OS
+
+on:
+  # run it on push to the default repository branch
+  push:
+    branches: [master]
+  pull_request:
+  # Only trigger, when the build workflow succeeded
+  # workflow_run:
+  #   workflows: [ "Deploy Application images when Merging on Master" ]
+  #   types: [completed]
+
+env:
+  LISTINGAPI_ENDPOINT: "http://localhost:8181/listings/32682"
+  PRICEMAP_PYTHON_ENDPOINT: "http://localhost:8080"
+  PRICEMAP_TYPESCRIPT_ENDPOINT: "http://localhost:8282"
+
+jobs:
+  build:
+    name: Test containers execution
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+
+    # steps to perform in job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Start containers
+        run: |
+          docker-compose up -d
+          sleep 10
+
+      - name: Display running containers
+        run: |
+          docker ps -a
+
+      - name: Check listingAPI availability
+        run: |
+          response=$(mktemp /tmp/backend_test_listingAPI_response.XXXX)
+          code=$(curl --silent -o $response -w "%{http_code}" "${{ env.LISTINGAPI_ENDPOINT }}")
+          # see https://github.com/stedolan/jq
+          apiResponseCount=$(cat $response | jq length)
+          if [ $code -eq 200 ] && [ $apiResponseCount -eq 20 ]; then
+              echo "listingAPI Call on ${{ env.LISTINGAPI_ENDPOINT }} is OK! 🎉";
+          else
+              echo "listingAPI returns a wrong status code ($code) or a wrong listings count ($apiResponseCount)";
+              exit 1
+          fi
+
+      - name: Check pricemap Python availability
+        run: |
+          code=$(curl --silent -o /tmp/backend_test_pricemap_python.XXXX -w "%{http_code}"  ${{ env.PRICEMAP_PYTHON_ENDPOINT }})
+          if [ $code -eq 200 ]; then
+              echo "call on pricemap through ${{ env.PRICEMAP_PYTHON_ENDPOINT }} is OK! 🎉";
+          else
+              echo "pricemap returns a wrong status code ($code)";
+              exit 1
+          fi
+
+      - name: Check pricemap typescript availability
+        run: |
+          code=$(curl --silent -o /tmp/backend_test_pricemap_typescript.XXXX -w "%{http_code}" "${{ env.PRICEMAP_TYPESCRIPT_ENDPOINT }}")
+          if [ $code -eq 200 ]; then
+              echo "call on pricemap through ${{ env.PRICEMAP_TYPESCRIPT_ENDPOINT }} is OK! 🎉";
+          else
+              echo "pricemap returns a wrong status code ($code)";
+              exit 1
+          fi
+
+      - name: Tear down containers
+        run: |
+          rm -f /tmp/backend_test_* # Remove curl tmp responses files
+          docker-compose down --remove-orphans --rmi all -v
