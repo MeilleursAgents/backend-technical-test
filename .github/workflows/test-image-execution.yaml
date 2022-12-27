@@ -66,7 +66,7 @@ jobs:
           --detach -e "PGHOST=host.docker.internal" -e "PGDATABASE=pricemap" -e "PGUSER=pricemap" \
           -e "PGPASSWORD=pricemap" -e "FLASK_APP=app" -e "FLASK_DEBUG=1"	-e GITHUB_ACTIONS=true -e CI=true \
           ghcr.io/meilleursagents/backend-technical-test/pricemap-python:latest \
-          /home/pricemap/wait-for-postgres.sh db:5432 -- flask run -h 0.0.0.0
+          /home/pricemap/wait-for-postgres.sh host.docker.internal:5432 -- flask run -h 0.0.0.0
 
       - name: Create pricemap Typescript container
         id: create_pricemap_typescript_container
