@@ -37,7 +37,7 @@ jobs:
           --health-retries 5
           --health-start-period 15s
         ports:
-          # Maps tcp port 5432 on service container to the host
+          # Maps tcp port 5432 on the host to the service container
           - 5432:5432
 
     # steps to perform in job
@@ -97,6 +97,7 @@ jobs:
       - name: Check pricemap Python availability
         run: |
           sleep 20
+          docker ps -a 
           curl "http://localhost:8080/" -vvv
 
       #- name: Check pricemap Python availability
