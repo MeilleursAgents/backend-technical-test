@@ -13,7 +13,7 @@ build: ## Builds the docker image associated with the project
 	docker-compose build --build-arg USER_ID=$(shell id -u $$USER) --build-arg GROUP_ID=$(shell id -g $$USER)
 
 run: build ## Locally run the application
-	docker-compose up
+	docker-compose up -d
 
 ##
 ## Miscellaneous 🪄
