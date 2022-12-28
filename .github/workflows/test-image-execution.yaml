@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     # steps to perform in job
@@ -29,10 +29,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Setup MacOs Env
+        if: runner.os == 'macOS'
+        run: |
+          brew install docker colima
+          brew install docker-compose
+          colima start
+          docker --version
+
       - name: Start containers
         run: |
           docker-compose up -d
-          sleep 10
+          sleep 30
 
       - name: Display running containers
         run: |
