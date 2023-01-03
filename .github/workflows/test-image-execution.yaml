@@ -1,0 +1,122 @@
+name: Test Image execution on OS
+
+on:
+  # run it on push to the default repository branch
+  push:
+    branches: [master]
+  pull_request:
+  # Only trigger, when the build workflow succeeded
+  # workflow_run:
+  #   workflows: [ "Deploy Application images when Merging on Master" ]
+  #   types: [completed]
+
+env:
+  LISTINGAPI_ENDPOINT: "http://localhost:8181/listings/32682"
+  PRICEMAP_PYTHON_ENDPOINT: "http://localhost:8080"
+  PRICEMAP_TYPESCRIPT_ENDPOINT: "http://localhost:8282"
+
+jobs:
+  build:
+    name: Test containers execution
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    # steps to perform in job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup MacOs Env
+        if: runner.os == 'macOS'
+        run: |
+          brew install docker colima
+          brew install docker-compose
+          colima start
+          docker --version
+
+      - name: Setup Windows Env
+        if: runner.os == 'Windows'
+        uses: Vampire/setup-wsl@v1
+        with:
+            distribution: Ubuntu-22.04
+
+      - name: Setup Docker on WSL
+        if: runner.os == 'Windows'
+        shell: wsl-bash {0}
+        run: |
+          sudo apt-get -y install \
+              ca-certificates \
+              curl \
+              gnupg \
+              lsb-release
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update
+          sudo apt-get -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-compose
+          sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+          sudo iptables -t filter -N DOCKER
+          dockerd &> dockerd-logfile &
+          sleep 5
+          docker ps -a
+
+      - name: Start containers for Linux / MacOS
+        if: runner.os != 'Windows'
+        run: |
+          docker-compose up -d
+          sleep 30
+
+      - name: Start containers for Windows
+        if: runner.os == 'Windows'
+        shell: wsl-bash {0}
+        run: |
+          docker ps -a
+          docker-compose up -d
+          sleep 30
+
+      - name: Display running containers
+        run: |
+          docker ps -a
+
+      - name: Check listingAPI availability
+        run: |
+          response=$(mktemp /tmp/backend_test_listingAPI_response.XXXX)
+          code=$(curl --silent -o $response -w "%{http_code}" "${{ env.LISTINGAPI_ENDPOINT }}")
+          # see https://github.com/stedolan/jq
+          apiResponseCount=$(cat $response | jq length)
+          if [ $code -eq 200 ] && [ $apiResponseCount -eq 20 ]; then
+              echo "listingAPI Call on ${{ env.LISTINGAPI_ENDPOINT }} is OK! 🎉";
+          else
+              echo "listingAPI returns a wrong status code ($code) or a wrong listings count ($apiResponseCount)";
+              exit 1
+          fi
+
+      - name: Check pricemap Python availability
+        run: |
+          code=$(curl --silent -o /tmp/backend_test_pricemap_python.XXXX -w "%{http_code}"  ${{ env.PRICEMAP_PYTHON_ENDPOINT }})
+          if [ $code -eq 200 ]; then
+              echo "call on pricemap through ${{ env.PRICEMAP_PYTHON_ENDPOINT }} is OK! 🎉";
+          else
+              echo "pricemap returns a wrong status code ($code)";
+              exit 1
+          fi
+
+      - name: Check pricemap typescript availability
+        run: |
+          code=$(curl --silent -o /tmp/backend_test_pricemap_typescript.XXXX -w "%{http_code}" "${{ env.PRICEMAP_TYPESCRIPT_ENDPOINT }}")
+          if [ $code -eq 200 ]; then
+              echo "call on pricemap through ${{ env.PRICEMAP_TYPESCRIPT_ENDPOINT }} is OK! 🎉";
+          else
+              echo "pricemap returns a wrong status code ($code)";
+              exit 1
+          fi
+
+      - name: Tear down containers
+        run: |
+          rm -f /tmp/backend_test_* # Remove curl tmp responses files
+          docker-compose down --remove-orphans --rmi all -v
